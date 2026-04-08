@@ -1,0 +1,5 @@
+# Compiled binary (rebuild with: make)
+core/fast_stat
+
+# Temp files created during analysis
+/tmp/latency_stat_*
