@@ -1,6 +1,0 @@
-test_mmap_file 2 0.0749488
-test_tick_pool 2 0.105849
-test_snapshot 2 0.0940828
-test_tick 1 0.117543
-test_mmap_manager 1 0.105722
----

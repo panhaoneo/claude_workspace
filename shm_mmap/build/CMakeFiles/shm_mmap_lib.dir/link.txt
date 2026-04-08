@@ -1,2 +1,0 @@
-/usr/bin/ar qc libshm_mmap_lib.a CMakeFiles/shm_mmap_lib.dir/src/mmap_file.cpp.o CMakeFiles/shm_mmap_lib.dir/src/tick_file_pool.cpp.o CMakeFiles/shm_mmap_lib.dir/src/mmap_manager.cpp.o
-/usr/bin/ranlib libshm_mmap_lib.a
