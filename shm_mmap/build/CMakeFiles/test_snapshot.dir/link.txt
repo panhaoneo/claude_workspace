@@ -1,0 +1,1 @@
+/usr/bin/c++ -g -fsanitize=address,undefined CMakeFiles/test_snapshot.dir/test/test_snapshot.cpp.o -o test_snapshot  libshm_mmap_lib.a lib/libgtest.a lib/libgtest_main.a -lpthread lib/libgtest.a 

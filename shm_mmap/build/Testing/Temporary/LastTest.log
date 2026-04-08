@@ -1,0 +1,265 @@
+Start testing: Apr 08 04:10 UTC
+----------------------------------------------------------
+3/5 Testing: test_snapshot
+3/5 Test: test_snapshot
+Command: "/home/user/claude_workspace/shm_mmap/build/test_snapshot"
+Directory: /home/user/claude_workspace/shm_mmap/build
+"test_snapshot" start time: Apr 08 04:10 UTC
+Output:
+----------------------------------------------------------
+Running main() from /home/user/claude_workspace/shm_mmap/build/_deps/googletest-src/googletest/src/gtest_main.cc
+[==========] Running 7 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 7 tests from SnapshotTest
+[ RUN      ] SnapshotTest.AppendAndRead_SingleRecord
+/home/user/claude_workspace/shm_mmap/test/test_snapshot.cpp:71:5: runtime error: member access within misaligned address 0x7f89e661e320 for type 'const struct SnapshotRecord', which requires 64 byte alignment
+0x7f89e661e320: note: pointer points here
+ 00 00 00 00  36 30 30 35 31 39 00 00  00 00 00 00 00 00 00 00  01 00 00 00 00 00 00 00  41 a1 f0 8c
+              ^ 
+/home/user/claude_workspace/shm_mmap/test/test_snapshot.cpp:72:5: runtime error: member access within misaligned address 0x7f89e661e320 for type 'const struct SnapshotRecord', which requires 64 byte alignment
+0x7f89e661e320: note: pointer points here
+ 00 00 00 00  36 30 30 35 31 39 00 00  00 00 00 00 00 00 00 00  01 00 00 00 00 00 00 00  41 a1 f0 8c
+              ^ 
+/home/user/claude_workspace/shm_mmap/test/test_snapshot.cpp:72:5: runtime error: member access within misaligned address 0x7f89e661e320 for type 'const struct SnapshotRecord', which requires 64 byte alignment
+0x7f89e661e320: note: pointer points here
+ 00 00 00 00  36 30 30 35 31 39 00 00  00 00 00 00 00 00 00 00  01 00 00 00 00 00 00 00  41 a1 f0 8c
+              ^ 
+[       OK ] SnapshotTest.AppendAndRead_SingleRecord (12 ms)
+[ RUN      ] SnapshotTest.AppendAndRead_MultipleRecords
+/home/user/claude_workspace/shm_mmap/test/test_snapshot.cpp:98:9: runtime error: member access within misaligned address 0x7f89e661e320 for type 'const struct SnapshotRecord', which requires 64 byte alignment
+0x7f89e661e320: note: pointer points here
+ 00 00 00 00  30 30 30 30 30 31 00 00  00 00 00 00 00 00 00 00  01 00 00 00 00 00 00 00  80 da c2 8c
+              ^ 
+[       OK ] SnapshotTest.AppendAndRead_MultipleRecords (8 ms)
+[ RUN      ] SnapshotTest.DropCount_WhenFull
+[       OK ] SnapshotTest.DropCount_WhenFull (9 ms)
+[ RUN      ] SnapshotTest.MultiSymbol_Independent
+/home/user/claude_workspace/shm_mmap/test/test_snapshot.cpp:148:5: runtime error: member access within misaligned address 0x7f89e6619320 for type 'const struct SnapshotRecord', which requires 64 byte alignment
+0x7f89e6619320: note: pointer points here
+ 00 00 00 00  30 30 30 30 30 31 00 00  00 00 00 00 00 00 00 00  01 00 00 00 00 00 00 00  c8 00 00 00
+              ^ 
+[       OK ] SnapshotTest.MultiSymbol_Independent (8 ms)
+[ RUN      ] SnapshotTest.GetSnapshotFile_NullForUnknownSymbol
+[       OK ] SnapshotTest.GetSnapshotFile_NullForUnknownSymbol (7 ms)
+[ RUN      ] SnapshotTest.IndexRegion_TimeRangeScan
+/home/user/claude_workspace/shm_mmap/test/test_snapshot.cpp:190:9: runtime error: member access within misaligned address 0x7f89e661e620 for type 'const struct SnapshotRecord', which requires 64 byte alignment
+0x7f89e661e620: note: pointer points here
+ 00 00 00 00  36 30 30 35 31 39 00 00  00 00 00 00 00 00 00 00  01 00 00 00 00 00 00 00  f8 ac f0 8c
+              ^ 
+/home/user/claude_workspace/shm_mmap/test/test_snapshot.cpp:190:9: runtime error: member access within misaligned address 0x7f89e661e620 for type 'const struct SnapshotRecord', which requires 64 byte alignment
+0x7f89e661e620: note: pointer points here
+ 00 00 00 00  36 30 30 35 31 39 00 00  00 00 00 00 00 00 00 00  01 00 00 00 00 00 00 00  f8 ac f0 8c
+              ^ 
+/home/user/claude_workspace/shm_mmap/test/test_snapshot.cpp:191:9: runtime error: member access within misaligned address 0x7f89e661e620 for type 'const struct SnapshotRecord', which requires 64 byte alignment
+0x7f89e661e620: note: pointer points here
+ 00 00 00 00  36 30 30 35 31 39 00 00  00 00 00 00 00 00 00 00  01 00 00 00 00 00 00 00  f8 ac f0 8c
+              ^ 
+/home/user/claude_workspace/shm_mmap/test/test_snapshot.cpp:191:9: runtime error: member access within misaligned address 0x7f89e661e620 for type 'const struct SnapshotRecord', which requires 64 byte alignment
+0x7f89e661e620: note: pointer points here
+ 00 00 00 00  36 30 30 35 31 39 00 00  00 00 00 00 00 00 00 00  01 00 00 00 00 00 00 00  f8 ac f0 8c
+              ^ 
+[       OK ] SnapshotTest.IndexRegion_TimeRangeScan (8 ms)
+[ RUN      ] SnapshotTest.IndexRegion_LatestSnapshot
+/home/user/claude_workspace/shm_mmap/test/test_snapshot.cpp:209:5: runtime error: member access within misaligned address 0x7f89e661e720 for type 'const struct SnapshotRecord', which requires 64 byte alignment
+0x7f89e661e720: note: pointer points here
+ 00 00 00 00  36 30 30 35 31 39 00 00  00 00 00 00 00 00 00 00  01 00 00 00 00 00 00 00  ec 03 00 00
+              ^ 
+[       OK ] SnapshotTest.IndexRegion_LatestSnapshot (6 ms)
+[----------] 7 tests from SnapshotTest (62 ms total)
+
+[----------] Global test environment tear-down
+[==========] 7 tests from 1 test suite ran. (62 ms total)
+[  PASSED  ] 7 tests.
+<end of output>
+Test time =   0.08 sec
+----------------------------------------------------------
+Test Passed.
+"test_snapshot" end time: Apr 08 04:10 UTC
+"test_snapshot" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/5 Testing: test_tick_pool
+2/5 Test: test_tick_pool
+Command: "/home/user/claude_workspace/shm_mmap/build/test_tick_pool"
+Directory: /home/user/claude_workspace/shm_mmap/build
+"test_tick_pool" start time: Apr 08 04:10 UTC
+Output:
+----------------------------------------------------------
+Running main() from /home/user/claude_workspace/shm_mmap/build/_deps/googletest-src/googletest/src/gtest_main.cc
+[==========] Running 7 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 7 tests from TickFilePoolTest
+[ RUN      ] TickFilePoolTest.Preallocate_CreatesFiles
+[       OK ] TickFilePoolTest.Preallocate_CreatesFiles (14 ms)
+[ RUN      ] TickFilePoolTest.Preallocate_HeaderFieldsCorrect
+[       OK ] TickFilePoolTest.Preallocate_HeaderFieldsCorrect (7 ms)
+[ RUN      ] TickFilePoolTest.Preallocate_Idempotent
+[       OK ] TickFilePoolTest.Preallocate_Idempotent (9 ms)
+[ RUN      ] TickFilePoolTest.Acquire_RenamesFile
+[       OK ] TickFilePoolTest.Acquire_RenamesFile (11 ms)
+[ RUN      ] TickFilePoolTest.Acquire_FileOpenedReadwrite
+[       OK ] TickFilePoolTest.Acquire_FileOpenedReadwrite (9 ms)
+[ RUN      ] TickFilePoolTest.Acquire_MultipleFiles
+[       OK ] TickFilePoolTest.Acquire_MultipleFiles (7 ms)
+[ RUN      ] TickFilePoolTest.Acquire_PoolExhausted
+[       OK ] TickFilePoolTest.Acquire_PoolExhausted (8 ms)
+[----------] 7 tests from TickFilePoolTest (68 ms total)
+
+[----------] Global test environment tear-down
+[==========] 7 tests from 1 test suite ran. (68 ms total)
+[  PASSED  ] 7 tests.
+<end of output>
+Test time =   0.09 sec
+----------------------------------------------------------
+Test Passed.
+"test_tick_pool" end time: Apr 08 04:10 UTC
+"test_tick_pool" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/5 Testing: test_mmap_manager
+5/5 Test: test_mmap_manager
+Command: "/home/user/claude_workspace/shm_mmap/build/test_mmap_manager"
+Directory: /home/user/claude_workspace/shm_mmap/build
+"test_mmap_manager" start time: Apr 08 04:10 UTC
+Output:
+----------------------------------------------------------
+Running main() from /home/user/claude_workspace/shm_mmap/build/_deps/googletest-src/googletest/src/gtest_main.cc
+[==========] Running 9 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 9 tests from MmapManagerTest
+[ RUN      ] MmapManagerTest.Mixed_SnapshotAndTick
+[       OK ] MmapManagerTest.Mixed_SnapshotAndTick (13 ms)
+[ RUN      ] MmapManagerTest.Stats_InitialState
+[       OK ] MmapManagerTest.Stats_InitialState (9 ms)
+[ RUN      ] MmapManagerTest.Stats_AfterWrites
+[       OK ] MmapManagerTest.Stats_AfterWrites (9 ms)
+[ RUN      ] MmapManagerTest.Stats_SnapshotDrops
+[       OK ] MmapManagerTest.Stats_SnapshotDrops (9 ms)
+[ RUN      ] MmapManagerTest.GetTickFiles_OrderedByFileSeq
+[       OK ] MmapManagerTest.GetTickFiles_OrderedByFileSeq (8 ms)
+[ RUN      ] MmapManagerTest.GetTickFiles_EmptyForUnknownChannel
+[       OK ] MmapManagerTest.GetTickFiles_EmptyForUnknownChannel (6 ms)
+[ RUN      ] MmapManagerTest.FlushAll_NoCrash
+[       OK ] MmapManagerTest.FlushAll_NoCrash (9 ms)
+[ RUN      ] MmapManagerTest.MultiSymbolMultiChannel
+[       OK ] MmapManagerTest.MultiSymbolMultiChannel (9 ms)
+[ RUN      ] MmapManagerTest.PoolExhaustion_ReturnsFalse
+[       OK ] MmapManagerTest.PoolExhaustion_ReturnsFalse (6 ms)
+[----------] 9 tests from MmapManagerTest (84 ms total)
+
+[----------] Global test environment tear-down
+[==========] 9 tests from 1 test suite ran. (85 ms total)
+[  PASSED  ] 9 tests.
+<end of output>
+Test time =   0.11 sec
+----------------------------------------------------------
+Test Passed.
+"test_mmap_manager" end time: Apr 08 04:10 UTC
+"test_mmap_manager" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/5 Testing: test_tick
+4/5 Test: test_tick
+Command: "/home/user/claude_workspace/shm_mmap/build/test_tick"
+Directory: /home/user/claude_workspace/shm_mmap/build
+"test_tick" start time: Apr 08 04:10 UTC
+Output:
+----------------------------------------------------------
+Running main() from /home/user/claude_workspace/shm_mmap/build/_deps/googletest-src/googletest/src/gtest_main.cc
+[==========] Running 11 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 11 tests from TickTest
+[ RUN      ] TickTest.SeqToSlot_FirstFile
+[       OK ] TickTest.SeqToSlot_FirstFile (15 ms)
+[ RUN      ] TickTest.SeqToSlot_RecordType_Order
+[       OK ] TickTest.SeqToSlot_RecordType_Order (7 ms)
+[ RUN      ] TickTest.FileSwitching_AfterFirstFileFull
+[       OK ] TickTest.FileSwitching_AfterFirstFileFull (11 ms)
+[ RUN      ] TickTest.FileSwitching_TwoFullFiles
+[       OK ] TickTest.FileSwitching_TwoFullFiles (8 ms)
+[ RUN      ] TickTest.MarkGap_SlotStateIsGap
+[       OK ] TickTest.MarkGap_SlotStateIsGap (7 ms)
+[ RUN      ] TickTest.MarkGap_StatsReflected
+[       OK ] TickTest.MarkGap_StatsReflected (7 ms)
+[ RUN      ] TickTest.RecoverTick_SucceedsForGapSlot
+[       OK ] TickTest.RecoverTick_SucceedsForGapSlot (8 ms)
+[ RUN      ] TickTest.RecoverTick_FailsIfNotGap
+[       OK ] TickTest.RecoverTick_FailsIfNotGap (7 ms)
+[ RUN      ] TickTest.RecoverTick_FailsIfAlreadyRecovered
+[       OK ] TickTest.RecoverTick_FailsIfAlreadyRecovered (7 ms)
+[ RUN      ] TickTest.RecoverTick_DataCorrectAfterRecovery
+[       OK ] TickTest.RecoverTick_DataCorrectAfterRecovery (6 ms)
+[ RUN      ] TickTest.MultiChannel_Independent
+[       OK ] TickTest.MultiChannel_Independent (7 ms)
+[----------] 11 tests from TickTest (95 ms total)
+
+[----------] Global test environment tear-down
+[==========] 11 tests from 1 test suite ran. (96 ms total)
+[  PASSED  ] 11 tests.
+<end of output>
+Test time =   0.12 sec
+----------------------------------------------------------
+Test Passed.
+"test_tick" end time: Apr 08 04:10 UTC
+"test_tick" time elapsed: 00:00:00
+----------------------------------------------------------
+
+1/5 Testing: test_mmap_file
+1/5 Test: test_mmap_file
+Command: "/home/user/claude_workspace/shm_mmap/build/test_mmap_file"
+Directory: /home/user/claude_workspace/shm_mmap/build
+"test_mmap_file" start time: Apr 08 04:10 UTC
+Output:
+----------------------------------------------------------
+Running main() from /home/user/claude_workspace/shm_mmap/build/_deps/googletest-src/googletest/src/gtest_main.cc
+[==========] Running 13 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 13 tests from MmapFileTest
+[ RUN      ] MmapFileTest.CreateSnapshot_FileExists
+[       OK ] MmapFileTest.CreateSnapshot_FileExists (2 ms)
+[ RUN      ] MmapFileTest.CreateSnapshot_HeaderFields
+[       OK ] MmapFileTest.CreateSnapshot_HeaderFields (2 ms)
+[ RUN      ] MmapFileTest.AppendSnapshot_SizeIncrements
+[       OK ] MmapFileTest.AppendSnapshot_SizeIncrements (2 ms)
+[ RUN      ] MmapFileTest.AppendSnapshot_DataReadback
+/home/user/claude_workspace/shm_mmap/test/test_mmap_file.cpp:132:5: runtime error: member access within misaligned address 0x7f6247ad5320 for type 'const struct SnapshotRecord', which requires 64 byte alignment
+0x7f6247ad5320: note: pointer points here
+ 00 00 00 00  36 30 30 35 31 39 00 00  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  41 a1 f0 8c
+              ^ 
+/home/user/claude_workspace/shm_mmap/test/test_mmap_file.cpp:133:5: runtime error: member access within misaligned address 0x7f6247ad5320 for type 'const struct SnapshotRecord', which requires 64 byte alignment
+0x7f6247ad5320: note: pointer points here
+ 00 00 00 00  36 30 30 35 31 39 00 00  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  41 a1 f0 8c
+              ^ 
+[       OK ] MmapFileTest.AppendSnapshot_DataReadback (3 ms)
+[ RUN      ] MmapFileTest.AppendSnapshot_FullReturnsNegOne
+[       OK ] MmapFileTest.AppendSnapshot_FullReturnsNegOne (2 ms)
+[ RUN      ] MmapFileTest.At_OutOfBoundsReturnsNullptr
+[       OK ] MmapFileTest.At_OutOfBoundsReturnsNullptr (2 ms)
+[ RUN      ] MmapFileTest.OpenReadonly_VerifyData
+[       OK ] MmapFileTest.OpenReadonly_VerifyData (2 ms)
+[ RUN      ] MmapFileTest.CreateTick_FileExists
+[       OK ] MmapFileTest.CreateTick_FileExists (2 ms)
+[ RUN      ] MmapFileTest.CreateTick_HeaderFields
+[       OK ] MmapFileTest.CreateTick_HeaderFields (2 ms)
+[ RUN      ] MmapFileTest.WriteTick_DataReadback
+[       OK ] MmapFileTest.WriteTick_DataReadback (2 ms)
+[ RUN      ] MmapFileTest.WriteTick_MultipleSlots
+[       OK ] MmapFileTest.WriteTick_MultipleSlots (2 ms)
+[ RUN      ] MmapFileTest.WriteTick_OutOfBoundsReturnsFalse
+[       OK ] MmapFileTest.WriteTick_OutOfBoundsReturnsFalse (2 ms)
+[ RUN      ] MmapFileTest.SlotState_InitiallyEmpty
+[       OK ] MmapFileTest.SlotState_InitiallyEmpty (2 ms)
+[----------] 13 tests from MmapFileTest (34 ms total)
+
+[----------] Global test environment tear-down
+[==========] 13 tests from 1 test suite ran. (34 ms total)
+[  PASSED  ] 13 tests.
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"test_mmap_file" end time: Apr 08 04:10 UTC
+"test_mmap_file" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Apr 08 04:10 UTC
