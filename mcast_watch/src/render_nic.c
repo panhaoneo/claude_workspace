@@ -17,9 +17,9 @@ static int drop_color(uint64_t val) {
 }
 
 static const char *bar_char(uint64_t val) {
-    if (val == 0) return "\xe2\x96\x91";  /* ░ */
-    if (val < 100) return "\xe2\x96\x93"; /* ▓ */
-    return "\xe2\x96\x88\xe2\x96\x88";   /* ██ */
+    if (val == 0) return " ";   /* none */
+    if (val < 100) return "~";  /* warn */
+    return "#";                 /* crit */
 }
 
 /* Compact bandwidth formatter: "1.23 Gbps" */
@@ -49,7 +49,7 @@ void render_nic(WINDOW *win, const mwatch_store_t *store, int *row, int width) {
 
     /* Section header */
     wattron(win, COLOR_PAIR(COL_HEADER) | A_BOLD);
-    mvwprintw(win, r++, 0, "%-*s", width, "── NIC & DRIVER ──────────────────────────────────────────────────────");
+    mvwprintw(win, r++, 0, "%-*s", width, "-- NIC & DRIVER -------------------------------------------------------");
     wattroff(win, COLOR_PAIR(COL_HEADER) | A_BOLD);
 
     /* RX / TX throughput */

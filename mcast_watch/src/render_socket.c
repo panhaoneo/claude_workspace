@@ -15,7 +15,7 @@ void render_socket(WINDOW *win, const mwatch_store_t *store, int *row, int width
 
     wattron(win, COLOR_PAIR(COL_HEADER) | A_BOLD);
     mvwprintw(win, r++, 0, "%-*s", width,
-              "── SOCKET (UDP drops) ────────────────────────────────────────────────");
+              "-- SOCKET (UDP drops) -------------------------------------------------");
     wattroff(win, COLOR_PAIR(COL_HEADER) | A_BOLD);
 
     if (store->socket_count == 0) {
@@ -40,8 +40,8 @@ void render_socket(WINDOW *win, const mwatch_store_t *store, int *row, int width
         if (shown >= 6) break;   /* cap display rows */
 
         int col = (s->drops_s > 0) ? (s->drops_s > 100 ? COL_CRIT : COL_WARN) : COL_NORMAL;
-        const char *bar = (s->drops_s == 0) ? "\xe2\x96\x91" :
-                          (s->drops_s < 100) ? "\xe2\x96\x93" : "\xe2\x96\x88\xe2\x96\x88";
+        const char *bar = (s->drops_s == 0) ? " " :
+                          (s->drops_s < 100) ? "~" : "#";
 
         wattron(win, COLOR_PAIR(COL_NORMAL));
         mvwprintw(win, r, 0, " %-22s %-16s %8u  ",
@@ -58,7 +58,7 @@ void render_socket(WINDOW *win, const mwatch_store_t *store, int *row, int width
     }
     if (shown == 0) {
         wattron(win, COLOR_PAIR(COL_OK));
-        mvwprintw(win, r++, 0, " ✓ no per-socket drops");
+        mvwprintw(win, r++, 0, " OK no per-socket drops");
         wattroff(win, COLOR_PAIR(COL_OK));
     }
 

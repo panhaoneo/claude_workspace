@@ -27,14 +27,14 @@ void diagnose(mwatch_store_t *store) {
 
     /* ── Case 1: NIC hardware / driver drops ── */
     if (nic->rx_missed_s > 0 || nic->rx_nobuf_s > 0) {
-        snprintf(sum, sizeof(sum), "rx_missed %llu/s rx_nobuf %llu/s → HW ring overflow",
+        snprintf(sum, sizeof(sum), "rx_missed %llu/s rx_nobuf %llu/s -> HW ring overflow",
                  (unsigned long long)nic->rx_missed_s,
                  (unsigned long long)nic->rx_nobuf_s);
         snprintf(cmd, sizeof(cmd), "ethtool -G %s rx 4096", store->ifname);
         DIAG_APPEND(store, DIAG_CRIT, "NIC DROP", sum, cmd);
         nic_ok = 0;
     } else if (nic->rx_drop_s > 0) {
-        snprintf(sum, sizeof(sum), "rx_drop %llu/s → driver queue drop",
+        snprintf(sum, sizeof(sum), "rx_drop %llu/s -> driver queue drop",
                  (unsigned long long)nic->rx_drop_s);
         snprintf(cmd, sizeof(cmd), "ethtool -G %s rx 4096", store->ifname);
         DIAG_APPEND(store, DIAG_WARN, "DRIVER DROP", sum, cmd);
@@ -43,14 +43,14 @@ void diagnose(mwatch_store_t *store) {
 
     /* ── Case 2: softirq / backlog drops ── */
     if (kern->sn_dropped_s > 0) {
-        snprintf(sum, sizeof(sum), "softnet_dropped %llu/s → CPU backlog overflow",
+        snprintf(sum, sizeof(sum), "softnet_dropped %llu/s -> CPU backlog overflow",
                  (unsigned long long)kern->sn_dropped_s);
         snprintf(cmd, sizeof(cmd), "sysctl -w net.core.netdev_max_backlog=200000");
         DIAG_APPEND(store, DIAG_WARN, "SOFTIRQ DROP", sum, cmd);
         softnet_ok = 0;
     }
     if (kern->sn_squeezed_s > 0) {
-        snprintf(sum, sizeof(sum), "time_squeezed %llu/s → softirq budget exhausted",
+        snprintf(sum, sizeof(sum), "time_squeezed %llu/s -> softirq budget exhausted",
                  (unsigned long long)kern->sn_squeezed_s);
         snprintf(cmd, sizeof(cmd), "sysctl -w net.core.netdev_budget=600");
         DIAG_APPEND(store, DIAG_WARN, "SOFTIRQ SQUEEZE", sum, cmd);
@@ -81,11 +81,11 @@ void diagnose(mwatch_store_t *store) {
     for (int i = 0; i < store->socket_count; i++) {
         const socket_stat_t *s = &store->sockets[i];
         if (s->drops_s > 0) {
-            snprintf(sum, sizeof(sum), "%s %s drops %llu/s → socket buf too small",
+            snprintf(sum, sizeof(sum), "%s %s drops %llu/s -> socket buf too small",
                      s->proc_name[0] ? s->proc_name : "?",
                      s->local_addr, (unsigned long long)s->drops_s);
             snprintf(cmd, sizeof(cmd),
-                     "setsockopt SO_RCVBUF 或 sysctl net.core.rmem_max=134217728");
+                     "setsockopt SO_RCVBUF or sysctl net.core.rmem_max=134217728");
             DIAG_APPEND(store, DIAG_WARN, "SOCKET DROP", sum, cmd);
             udp_ok = 0;
         }
@@ -94,10 +94,10 @@ void diagnose(mwatch_store_t *store) {
     /* ── Case 5: CPU softirq bottleneck ── */
     for (int i = 0; i < store->cpu_count; i++) {
         if (store->cpus[i].softirq_pct > 30.0) {
-            snprintf(sum, sizeof(sum), "CPU%d softirq %.1f%% → net RX saturated",
+            snprintf(sum, sizeof(sum), "CPU%d softirq %.1f%% -> net RX saturated",
                      i, store->cpus[i].softirq_pct);
             snprintf(cmd, sizeof(cmd),
-                     "检查 IRQ 亲和，考虑 RPS/RFS 或增加 RX 队列");
+                     "check IRQ affinity, consider RPS/RFS or more RX queues");
             DIAG_APPEND(store, DIAG_WARN, "CPU BOTTLENECK", sum, cmd);
             cpu_ok = 0;
             break;  /* one warning per cycle is enough */
@@ -146,19 +146,19 @@ void diagnose(mwatch_store_t *store) {
     if (nic_ok) {
         char ring_info[32] = "";
         if (nic->ring_max > 0) {
-            snprintf(ring_info, sizeof(ring_info), "，ring %u%%",
+            snprintf(ring_info, sizeof(ring_info), ", ring %u%%",
                      nic->ring_cur * 100 / nic->ring_max);
         }
-        snprintf(sum, sizeof(sum), "无硬件丢包%s", ring_info);
+        snprintf(sum, sizeof(sum), "no HW drops%s", ring_info);
         DIAG_APPEND(store, DIAG_OK, "NIC/DRIVER", sum, "");
     }
     if (softnet_ok) {
-        DIAG_APPEND(store, DIAG_OK, "SOFTNET", "无 backlog 丢包", "");
+        DIAG_APPEND(store, DIAG_OK, "SOFTNET", "no backlog drops", "");
     }
     if (udp_ok) {
-        DIAG_APPEND(store, DIAG_OK, "UDP LAYER", "无 buffer 溢出", "");
+        DIAG_APPEND(store, DIAG_OK, "UDP LAYER", "no buffer overflow", "");
     }
     if (cpu_ok) {
-        DIAG_APPEND(store, DIAG_OK, "CPU/IRQ", "softirq 负载正常", "");
+        DIAG_APPEND(store, DIAG_OK, "CPU/IRQ", "softirq load normal", "");
     }
 }

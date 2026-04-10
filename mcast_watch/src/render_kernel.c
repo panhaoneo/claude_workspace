@@ -15,9 +15,9 @@ static int drop_color(uint64_t val) {
 }
 
 static const char *bar_char(uint64_t val) {
-    if (val == 0) return "\xe2\x96\x91";
-    if (val < 100) return "\xe2\x96\x93";
-    return "\xe2\x96\x88\xe2\x96\x88";
+    if (val == 0) return " ";
+    if (val < 100) return "~";
+    return "#";
 }
 
 void render_kernel(WINDOW *win, const mwatch_store_t *store, int *row, int width) {
@@ -26,7 +26,7 @@ void render_kernel(WINDOW *win, const mwatch_store_t *store, int *row, int width
 
     wattron(win, COLOR_PAIR(COL_HEADER) | A_BOLD);
     mvwprintw(win, r++, 0, "%-*s", width,
-              "── KERNEL / SOFTNET ──────────────────────────────────────────────────");
+              "-- KERNEL / SOFTNET ---------------------------------------------------");
     wattroff(win, COLOR_PAIR(COL_HEADER) | A_BOLD);
 
     /* softnet line */

@@ -35,7 +35,7 @@ void render_cpu(WINDOW *win, const mwatch_store_t *store, int *row, int width) {
 
     wattron(win, COLOR_PAIR(COL_HEADER) | A_BOLD);
     mvwprintw(win, r++, 0, "%-*s", width,
-              "── CPU & IRQ ─────────────────────────────────────────────────────────");
+              "-- CPU & IRQ ----------------------------------------------------------");
     wattroff(win, COLOR_PAIR(COL_HEADER) | A_BOLD);
 
     int n = store->cpu_count;
@@ -98,7 +98,7 @@ void render_cpu(WINDOW *win, const mwatch_store_t *store, int *row, int width) {
             int pct = (qu->total > 0) ? (int)(dom_cnt * 100 / qu->total) : 0;
             int col = (pct > 80) ? COL_CRIT : (pct > 50 ? COL_WARN : COL_NORMAL);
             wattron(win, COLOR_PAIR(col));
-            wprintw(win, "%s→CPU%d(%d%%) ", qu->queue_name, dom_cpu, pct);
+            wprintw(win, "%s->CPU%d(%d%%) ", qu->queue_name, dom_cpu, pct);
             wattroff(win, COLOR_PAIR(col));
         }
         r++;
@@ -107,7 +107,7 @@ void render_cpu(WINDOW *win, const mwatch_store_t *store, int *row, int width) {
     /* irqbalance status */
     if (irq->irqbalance_running) {
         wattron(win, COLOR_PAIR(COL_WARN));
-        mvwprintw(win, r++, 0, " irqbalance: running \xe2\x86\x90 WARN");
+        mvwprintw(win, r++, 0, " irqbalance: running  [WARN]");
         wattroff(win, COLOR_PAIR(COL_WARN));
     }
 

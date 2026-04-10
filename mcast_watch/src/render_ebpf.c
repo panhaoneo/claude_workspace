@@ -17,13 +17,13 @@ void render_ebpf(WINDOW *win, const mwatch_store_t *store, int *row, int width,
     wattron(win, COLOR_PAIR(COL_HEADER) | A_BOLD);
     if (collapsed) {
         mvwprintw(win, r++, 0, "%-*s", width,
-                  "── eBPF DROP REASON [collapsed - press 'e' to expand] ──────────────");
+                  "-- eBPF DROP REASON [collapsed - press 'e' to expand] --------------");
         wattroff(win, COLOR_PAIR(COL_HEADER) | A_BOLD);
         *row = r;
         return;
     }
     mvwprintw(win, r++, 0, "%-*s", width,
-              "── eBPF DROP REASON ──────────────────────────────────────────────────");
+              "-- eBPF DROP REASON ---------------------------------------------------");
     wattroff(win, COLOR_PAIR(COL_HEADER) | A_BOLD);
 
     const ebpf_stat_t *e = &store->ebpf;
@@ -52,11 +52,11 @@ void render_ebpf(WINDOW *win, const mwatch_store_t *store, int *row, int width,
 
         int col = (dr->count_s > 100) ? COL_CRIT :
                   (dr->count_s >   0) ? COL_WARN  : COL_NORMAL;
-        const char *bar = (dr->count_s == 0) ? "\xe2\x96\x91" :
-                          (dr->count_s < 100) ? "\xe2\x96\x93" : "\xe2\x96\x88\xe2\x96\x88";
+        const char *bar = (dr->count_s == 0) ? " " :
+                          (dr->count_s < 100) ? "~" : "#";
         const char *note = "";
         if (dr->count_s > 0 && strstr(dr->reason_str, "UDP_SOCK_FULL"))
-            note = " \xe2\x86\x90 \xe4\xb8\xbb\xe8\xa6\x81\xe4\xb8\xa2\xe5\x8c\x85\xe5\x8e\x9f\xe5\x9b\xa0";  /* ← 主要丢包原因 */
+            note = " <- primary drop reason";
 
         wattron(win, COLOR_PAIR(col));
         mvwprintw(win, r++, 0, " %-40s %s %6llu/s%s",

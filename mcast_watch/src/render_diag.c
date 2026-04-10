@@ -14,7 +14,7 @@ void render_diag(WINDOW *win, const mwatch_store_t *store, int *row, int width) 
 
     wattron(win, COLOR_PAIR(COL_HEADER) | A_BOLD);
     mvwprintw(win, r++, 0, "%-*s", width,
-              "── DIAGNOSIS ─────────────────────────────────────────────────────────");
+              "-- DIAGNOSIS ----------------------------------------------------------");
     wattroff(win, COLOR_PAIR(COL_HEADER) | A_BOLD);
 
     if (store->diag_count == 0) {
@@ -31,27 +31,18 @@ void render_diag(WINDOW *win, const mwatch_store_t *store, int *row, int width) 
         int col;
 
         switch (d->level) {
-        case DIAG_CRIT:
-            icon = "\xf0\x9f\x94\xa5";  /* 🔥 */
-            col  = COL_CRIT;
-            break;
-        case DIAG_WARN:
-            icon = "\xe2\x9a\xa0";      /* ⚠ */
-            col  = COL_WARN;
-            break;
-        default:
-            icon = "\xe2\x9c\x93";      /* ✓ */
-            col  = COL_OK;
-            break;
+        case DIAG_CRIT: icon = "!!"; col = COL_CRIT; break;
+        case DIAG_WARN: icon = "! "; col = COL_WARN; break;
+        default:        icon = "OK"; col = COL_OK;   break;
         }
 
         wattron(win, COLOR_PAIR(col));
-        mvwprintw(win, r, 0, " %s %-16s  %s", icon, d->layer, d->summary);
+        mvwprintw(win, r, 0, " [%s] %-16s  %s", icon, d->layer, d->summary);
         wattroff(win, COLOR_PAIR(col));
 
         if (d->cmd[0]) {
             wattron(win, COLOR_PAIR(COL_NORMAL));
-            wprintw(win, " → %s", d->cmd);
+            wprintw(win, " => %s", d->cmd);
             wattroff(win, COLOR_PAIR(COL_NORMAL));
         }
         r++;

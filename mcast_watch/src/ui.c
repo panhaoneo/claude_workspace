@@ -1,6 +1,7 @@
 /* ui.c – ncurses single-screen UI loop */
 #include "ui.h"
 #include "render_nic.h"
+#include <locale.h>
 #include "render_kernel.h"
 #include "render_cpu.h"
 #include "render_socket.h"
@@ -73,6 +74,7 @@ static void redraw(WINDOW *win, const mwatch_store_t *store,
 }
 
 void ui_run(mwatch_store_t *store, volatile int *running) {
+    setlocale(LC_ALL, "");   /* must be before initscr() */
     WINDOW *win = initscr();
     cbreak();
     noecho();
