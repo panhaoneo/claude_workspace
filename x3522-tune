@@ -1,0 +1,698 @@
+#!/usr/bin/env bash
+# x3522-tune - AMD X3522 (EfCt) Performance Tuning Tool
+# Reference: AMD UG1523 (Alveo X3522 User Guide), XN-201257-CD (ef_vi Conversion Guide)
+# Requires: OpenOnload 8.1.26+, Linux Kernel 5.15+
+# Must be run as root for apply mode; check mode requires root for some /proc/irq reads.
+
+set -euo pipefail
+
+VERSION="1.0.0"
+SCRIPT_NAME="x3522-tune"
+
+# ─── Colour codes ─────────────────────────────────────────────────────────────
+if [[ -t 1 ]]; then
+    C_PASS="\033[0;32m"
+    C_WARN="\033[0;33m"
+    C_FAIL="\033[0;31m"
+    C_INFO="\033[0;36m"
+    C_BOLD="\033[1m"
+    C_RESET="\033[0m"
+else
+    C_PASS="" C_WARN="" C_FAIL="" C_INFO="" C_BOLD="" C_RESET=""
+fi
+
+# ─── Global state ─────────────────────────────────────────────────────────────
+CMD=""
+OPT_IFACE=""
+OPT_APP_CPUS=""
+OPT_RING_SIZE=4096
+OPT_QUEUES=1
+OPT_RX_USECS=50
+OPT_JSON=0
+OPT_APPLY=0
+OPT_DRY_RUN=0
+OPT_BEFORE_FILE=""
+OPT_AFTER_FILE=""
+
+COUNT_PASS=0
+COUNT_WARN=0
+COUNT_FAIL=0
+
+# JSON results accumulator
+JSON_CHECKS=""
+
+# ─── Usage ────────────────────────────────────────────────────────────────────
+usage() {
+    cat <<EOF
+${C_BOLD}${SCRIPT_NAME} v${VERSION}${C_RESET} - AMD X3522 (EfCt) Performance Tuning Tool
+
+Usage:
+  ${SCRIPT_NAME} check  --iface <ifname> --app-cpus <cpu-list> [options]
+  ${SCRIPT_NAME} apply  --iface <ifname> --app-cpus <cpu-list> [options]
+  ${SCRIPT_NAME} report --before <file> --after <file>
+
+Commands:
+  check   Detect current system configuration and compare with recommendations
+  apply   Automatically apply fixes for FAIL and WARN items (requires root)
+  report  Compare two JSON snapshots (before/after) and print a diff summary
+
+Options:
+  --iface <ifname>       NIC interface name, e.g. eth0
+  --app-cpus <list>      Application thread CPU list, e.g. "2,3" or "2-5"
+  --ring-size <n>        ef_vi RX ring size (default: 4096)
+  --queues <n>           Number of RX queues in use (default: 1)
+  --rx-usecs <n>         Desired interrupt moderation value in µs (default: 50)
+  --json                 Output in JSON format (for CI integration)
+  --apply                Automatically apply fixes (requires root)
+  --dry-run              Show commands that would be run, without executing
+  -h, --help             Show this help
+
+Examples:
+  ${SCRIPT_NAME} check --iface eth0 --app-cpus 2,3
+  ${SCRIPT_NAME} check --iface eth0 --app-cpus 2,3 --ring-size 8192 --queues 2 --json
+  ${SCRIPT_NAME} apply --iface eth0 --app-cpus 2,3 --dry-run
+  ${SCRIPT_NAME} report --before baseline.json --after after_tuning.json
+EOF
+}
+
+# ─── Utility functions ────────────────────────────────────────────────────────
+
+die() { echo -e "${C_FAIL}ERROR: $*${C_RESET}" >&2; exit 1; }
+
+require_root() {
+    [[ "${EUID:-$(id -u)}" -eq 0 ]] || die "This operation requires root privileges. Re-run with sudo."
+}
+
+# Expand a CPU list ("2,3" or "2-5" or "2,4-6") into space-separated CPU numbers
+expand_cpulist() {
+    local cpulist=$1
+    local result=()
+    IFS=',' read -ra parts <<< "$cpulist"
+    for part in "${parts[@]}"; do
+        if [[ "$part" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+            for ((c=${BASH_REMATCH[1]}; c<=${BASH_REMATCH[2]}; c++)); do
+                result+=("$c")
+            done
+        elif [[ "$part" =~ ^[0-9]+$ ]]; then
+            result+=("$part")
+        else
+            die "Invalid CPU specification: '$part'"
+        fi
+    done
+    echo "${result[*]}"
+}
+
+# Convert a space-separated CPU list to a hex bitmask string (without 0x prefix)
+cpulist_to_mask() {
+    local cpus=($1)
+    local mask=0
+    for cpu in "${cpus[@]}"; do
+        mask=$(( mask | (1 << cpu) ))
+    done
+    printf '%x' "$mask"
+}
+
+# Convert hex mask string to sorted CPU list
+mask_to_cpulist() {
+    local hex=${1//,/}       # remove any commas ethtool might insert in wide masks
+    hex=${hex##0x}
+    local mask=$(( 16#${hex} ))
+    local cpus=()
+    local bit=0
+    while [[ $mask -gt 0 ]]; do
+        if (( mask & 1 )); then cpus+=("$bit"); fi
+        mask=$(( mask >> 1 ))
+        bit=$(( bit + 1 ))
+    done
+    echo "${cpus[*]}"
+}
+
+# Check if two bitmask strings share any bits (both as plain hex)
+masks_overlap() {
+    local a=$(( 16#${1//,/} ))
+    local b=$(( 16#${2//,/} ))
+    (( (a & b) != 0 ))
+}
+
+# NUMA node for a CPU
+cpu_numa_node() {
+    local cpu=$1
+    local path="/sys/devices/system/cpu/cpu${cpu}/topology/physical_package_id"
+    if [[ -r "$path" ]]; then
+        cat "$path"
+    else
+        echo "unknown"
+    fi
+}
+
+# ─── Result recording ─────────────────────────────────────────────────────────
+
+_record() {
+    local status=$1   # pass | warn | fail
+    local id=$2
+    local name=$3
+    local detail=$4
+    local fix_cmd=${5:-""}
+
+    case "$status" in
+        pass) COUNT_PASS=$(( COUNT_PASS + 1 )); icon="${C_PASS}✅ PASS${C_RESET}" ;;
+        warn) COUNT_WARN=$(( COUNT_WARN + 1 )); icon="${C_WARN}⚠️  WARN${C_RESET}" ;;
+        fail) COUNT_FAIL=$(( COUNT_FAIL + 1 )); icon="${C_FAIL}❌ FAIL${C_RESET}" ;;
+    esac
+
+    if [[ $OPT_JSON -eq 0 ]]; then
+        printf "\n[%s] %s\n" "$id" "${C_BOLD}${name}${C_RESET}"
+        printf "  %b  %s\n" "$icon" "$detail"
+        if [[ -n "$fix_cmd" ]]; then
+            printf "           ${C_INFO}建议: %s${C_RESET}\n" "$fix_cmd"
+        fi
+    fi
+
+    # Build JSON fragment (append to global string)
+    local json_fix="null"
+    if [[ -n "$fix_cmd" ]]; then
+        # Escape double quotes in fix_cmd
+        local escaped="${fix_cmd//\"/\\\"}"
+        json_fix="\"${escaped}\""
+    fi
+    local sep=""
+    [[ -n "$JSON_CHECKS" ]] && sep=","
+    JSON_CHECKS+="${sep}
+    {
+      \"id\": \"${id}\",
+      \"name\": \"${name}\",
+      \"status\": \"${status}\",
+      \"detail\": \"${detail//\"/\\\"}\",
+      \"fix_cmd\": ${json_fix}
+    }"
+}
+
+pass() { _record "pass" "$1" "$2" "$3" ""; }
+warn() { _record "warn" "$1" "$2" "$3" "${4:-}"; }
+fail() { _record "fail" "$1" "$2" "$3" "${4:-}"; }
+
+# Execute a command: real in apply mode, printed only in dry-run
+run_fix() {
+    local cmd=$1
+    if [[ $OPT_DRY_RUN -eq 1 ]]; then
+        echo -e "  ${C_INFO}[dry-run] ${cmd}${C_RESET}"
+    elif [[ $OPT_APPLY -eq 1 ]]; then
+        echo -e "  ${C_INFO}[apply] ${cmd}${C_RESET}"
+        eval "$cmd"
+    fi
+}
+
+# ─── M1: hugepages_check ──────────────────────────────────────────────────────
+check_hugepages() {
+    local ring_size=${OPT_RING_SIZE}
+    local queues=${OPT_QUEUES}
+    local required=$(( (ring_size / 1024 + 1) * queues ))
+
+    local current=0 free=0
+    [[ -r /proc/sys/vm/nr_hugepages ]] && current=$(cat /proc/sys/vm/nr_hugepages)
+    free=$(grep -m1 'HugePages_Free' /proc/meminfo 2>/dev/null | awk '{print $2}' || echo 0)
+    local total=$(grep -m1 'HugePages_Total' /proc/meminfo 2>/dev/null | awk '{print $2}' || echo 0)
+
+    if [[ $free -ge $required ]]; then
+        pass "M1" "hugepages" \
+            "nr_hugepages=${current}, 需求=${required} (ring=${ring_size}, queues=${queues}), Free=${free}"
+    else
+        local recommended=$(( required + 10 ))
+        fail "M1" "hugepages" \
+            "Free hugepages=${free} < 需求=${required} (ring=${ring_size}, queues=${queues})" \
+            "echo ${recommended} > /proc/sys/vm/nr_hugepages"
+        if [[ $OPT_APPLY -eq 1 || $OPT_DRY_RUN -eq 1 ]]; then
+            run_fix "echo ${recommended} > /proc/sys/vm/nr_hugepages"
+            run_fix "echo 'vm.nr_hugepages = ${recommended}' >> /etc/sysctl.d/99-x3522.conf"
+        fi
+    fi
+}
+
+# ─── M2: irq_affinity_check ───────────────────────────────────────────────────
+check_irq_affinity() {
+    local iface=${OPT_IFACE}
+    local irq_dir="/sys/class/net/${iface}/device/msi_irqs"
+
+    if [[ ! -d "$irq_dir" ]]; then
+        warn "M2" "irq_affinity" \
+            "无法读取 ${irq_dir}，请确认接口名正确且驱动已加载" ""
+        return
+    fi
+
+    local app_cpus_expanded
+    app_cpus_expanded=$(expand_cpulist "$OPT_APP_CPUS")
+    local app_mask
+    app_mask=$(cpulist_to_mask "$app_cpus_expanded")
+
+    # Determine NIC NUMA node to find sibling CPUs for suggestion
+    local nic_numa=0
+    local numa_path="/sys/class/net/${iface}/device/numa_node"
+    [[ -r "$numa_path" ]] && nic_numa=$(cat "$numa_path") && nic_numa=${nic_numa//-1/0}
+
+    # Build a mask of all CPUs on same NUMA node that are NOT app CPUs
+    local irq_candidate_mask=0
+    for cpu_path in /sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_governor; do
+        local cpu_dir
+        cpu_dir=$(dirname "$cpu_path")
+        local cpu_id
+        cpu_id=$(basename "$cpu_dir" | tr -dc '0-9')
+        [[ -z "$cpu_id" ]] && continue
+        local pkg_path="${cpu_dir}/topology/physical_package_id"
+        [[ -r "$pkg_path" ]] || continue
+        local pkg
+        pkg=$(cat "$pkg_path")
+        if [[ "$pkg" == "$nic_numa" ]]; then
+            local bit=$(( 1 << cpu_id ))
+            # Exclude app CPUs
+            if (( (bit & (16#${app_mask})) == 0 )); then
+                irq_candidate_mask=$(( irq_candidate_mask | bit ))
+            fi
+        fi
+    done
+    local suggested_mask
+    suggested_mask=$(printf '%x' "$irq_candidate_mask")
+    [[ "$suggested_mask" == "0" ]] && suggested_mask="$app_mask"  # fallback
+
+    local irq_list
+    irq_list=$(ls "$irq_dir" 2>/dev/null)
+    local total_irqs
+    total_irqs=$(echo "$irq_list" | wc -w)
+    local irqs_array=( $irq_list )
+
+    # TX IRQ heuristic: last MSI IRQ
+    local tx_irq="${irqs_array[${#irqs_array[@]}-1]}"
+
+    local any_fail=0
+    local fail_details=()
+    local fix_cmds=()
+
+    for irq in $irq_list; do
+        local affinity_path="/proc/irq/${irq}/smp_affinity"
+        if [[ ! -r "$affinity_path" ]]; then
+            continue
+        fi
+        local affinity
+        affinity=$(cat "$affinity_path" | tr -d ',' | tr -d ' ')
+
+        if [[ "$irq" == "$tx_irq" ]]; then
+            # TX IRQ: should share with app CPUs for cache locality
+            if masks_overlap "$affinity" "$app_mask"; then
+                : # good - TX IRQ on app core
+            else
+                # Not necessarily a failure, just advisory
+                :
+            fi
+        else
+            # RX IRQ: must NOT overlap with app CPU mask
+            if masks_overlap "$affinity" "$app_mask" 2>/dev/null; then
+                any_fail=1
+                fail_details+=("IRQ ${irq} affinity=0x${affinity} 与应用核 CPU ${OPT_APP_CPUS} 重叠")
+                fix_cmds+=("echo ${suggested_mask} > /proc/irq/${irq}/smp_affinity")
+            fi
+        fi
+    done
+
+    if [[ $any_fail -eq 0 ]]; then
+        pass "M2" "irq_affinity" \
+            "所有 RX IRQ (共 $(( total_irqs - 1 )) 个) 均未打到应用核 ${OPT_APP_CPUS}；TX IRQ=${tx_irq}"
+    else
+        local detail="${fail_details[0]}"
+        [[ ${#fail_details[@]} -gt 1 ]] && detail+=" (等 ${#fail_details[@]} 个 IRQ)"
+        local fix="${fix_cmds[0]}"
+        for i in "${!fix_cmds[@]}"; do
+            [[ $i -eq 0 ]] && continue
+            fix+="; ${fix_cmds[$i]}"
+        done
+        fail "M2" "irq_affinity" "$detail" "$fix"
+        if [[ $OPT_APPLY -eq 1 || $OPT_DRY_RUN -eq 1 ]]; then
+            for cmd in "${fix_cmds[@]}"; do
+                run_fix "$cmd"
+            done
+        fi
+    fi
+}
+
+# ─── M3: irqbalance_check ─────────────────────────────────────────────────────
+check_irqbalance() {
+    local running=0
+    if command -v systemctl &>/dev/null; then
+        systemctl is-active --quiet irqbalance 2>/dev/null && running=1 || true
+    elif pgrep -x irqbalance &>/dev/null; then
+        running=1
+    fi
+
+    if [[ $running -eq 0 ]]; then
+        pass "M3" "irqbalance" "irqbalance 未运行"
+    else
+        local pid
+        pid=$(pgrep -x irqbalance 2>/dev/null | head -1 || echo "?")
+        fail "M3" "irqbalance" \
+            "irqbalance 正在运行 (PID ${pid})" \
+            "systemctl disable --now irqbalance"
+        if [[ $OPT_APPLY -eq 1 || $OPT_DRY_RUN -eq 1 ]]; then
+            run_fix "systemctl disable --now irqbalance"
+        fi
+    fi
+}
+
+# ─── M4: interrupt_moderation_check ──────────────────────────────────────────
+check_interrupt_moderation() {
+    local iface=${OPT_IFACE}
+
+    if ! command -v ethtool &>/dev/null; then
+        warn "M4" "interrupt_moderation" "ethtool 未安装，无法检查" ""
+        return
+    fi
+
+    local rx_usecs
+    rx_usecs=$(ethtool -c "$iface" 2>/dev/null | grep -m1 'rx-usecs:' | awk '{print $2}')
+
+    if [[ -z "$rx_usecs" ]]; then
+        warn "M4" "interrupt_moderation" \
+            "无法读取 ${iface} 的 interrupt moderation 设置 (ethtool -c 失败)" ""
+        return
+    fi
+
+    if [[ "$rx_usecs" =~ ^[0-9]+$ ]]; then
+        if (( rx_usecs >= 25 && rx_usecs <= 100 )); then
+            pass "M4" "interrupt_moderation" \
+                "rx-usecs=${rx_usecs} (范围 25–100µs，合理)"
+        elif [[ "$rx_usecs" -eq 0 ]]; then
+            warn "M4" "interrupt_moderation" \
+                "rx-usecs=0 (中断聚合关闭)，CPU 负载较高" \
+                "ethtool -C ${iface} rx-usecs ${OPT_RX_USECS}"
+            if [[ $OPT_APPLY -eq 1 || $OPT_DRY_RUN -eq 1 ]]; then
+                run_fix "ethtool -C ${iface} rx-usecs ${OPT_RX_USECS}"
+            fi
+        else
+            warn "M4" "interrupt_moderation" \
+                "rx-usecs=${rx_usecs} > 100µs，可能影响内核路径延迟" \
+                "ethtool -C ${iface} rx-usecs ${OPT_RX_USECS}"
+            if [[ $OPT_APPLY -eq 1 || $OPT_DRY_RUN -eq 1 ]]; then
+                run_fix "ethtool -C ${iface} rx-usecs ${OPT_RX_USECS}"
+            fi
+        fi
+    else
+        warn "M4" "interrupt_moderation" \
+            "rx-usecs 值无法解析: '${rx_usecs}'" ""
+    fi
+}
+
+# ─── M5: numa_topology_check ──────────────────────────────────────────────────
+check_numa_topology() {
+    local iface=${OPT_IFACE}
+    local numa_path="/sys/class/net/${iface}/device/numa_node"
+
+    if [[ ! -r "$numa_path" ]]; then
+        warn "M5" "numa_topology" \
+            "无法读取 ${numa_path}，跳过 NUMA 检查" ""
+        return
+    fi
+
+    local nic_numa
+    nic_numa=$(cat "$numa_path")
+    # -1 means not NUMA-aware, treat as 0
+    [[ "$nic_numa" == "-1" ]] && nic_numa=0
+
+    local app_cpus_expanded
+    app_cpus_expanded=$(expand_cpulist "$OPT_APP_CPUS")
+
+    local cross_numa=()
+    local cross_nodes=()
+    for cpu in $app_cpus_expanded; do
+        local cpu_numa
+        cpu_numa=$(cpu_numa_node "$cpu")
+        if [[ "$cpu_numa" != "unknown" && "$cpu_numa" != "$nic_numa" ]]; then
+            cross_numa+=("CPU${cpu}")
+            cross_nodes+=("NUMA${cpu_numa}")
+        fi
+    done
+
+    if [[ ${#cross_numa[@]} -eq 0 ]]; then
+        pass "M5" "numa_topology" \
+            "NIC NUMA=${nic_numa}，应用核 ${OPT_APP_CPUS} 均在 NUMA${nic_numa}"
+    else
+        local cross_str
+        cross_str=$(printf '%s ' "${cross_numa[@]}")
+        warn "M5" "numa_topology" \
+            "跨 NUMA 访问: ${cross_str}不在 NIC NUMA${nic_numa} 上，会增加内存延迟" \
+            "建议将应用线程绑定到 NUMA${nic_numa} 上的 CPU"
+    fi
+}
+
+# ─── M6: cpu_governor_check ───────────────────────────────────────────────────
+check_cpu_governor() {
+    local app_cpus_expanded
+    app_cpus_expanded=$(expand_cpulist "$OPT_APP_CPUS")
+
+    local non_perf=()
+    for cpu in $app_cpus_expanded; do
+        local gov_path="/sys/devices/system/cpu/cpu${cpu}/cpufreq/scaling_governor"
+        if [[ -r "$gov_path" ]]; then
+            local gov
+            gov=$(cat "$gov_path")
+            if [[ "$gov" != "performance" ]]; then
+                non_perf+=("CPU${cpu}:${gov}")
+            fi
+        else
+            non_perf+=("CPU${cpu}:unknown(no cpufreq)")
+        fi
+    done
+
+    if [[ ${#non_perf[@]} -eq 0 ]]; then
+        pass "M6" "cpu_governor" \
+            "应用核 ${OPT_APP_CPUS} 均为 performance governor"
+    else
+        local detail
+        detail=$(printf '%s  ' "${non_perf[@]}")
+        # Build CPU list for cpupower command
+        local cpu_list
+        cpu_list=$(echo "$app_cpus_expanded" | tr ' ' ',')
+        warn "M6" "cpu_governor" \
+            "${detail}" \
+            "cpupower -c ${cpu_list} frequency-set -g performance"
+        if [[ $OPT_APPLY -eq 1 || $OPT_DRY_RUN -eq 1 ]]; then
+            run_fix "cpupower -c ${cpu_list} frequency-set -g performance"
+        fi
+    fi
+}
+
+# ─── M7: ring_size_advisor ────────────────────────────────────────────────────
+check_ring_size_advisor() {
+    local ring_size=${OPT_RING_SIZE}
+    local queues=${OPT_QUEUES}
+    local free
+    free=$(grep -m1 'HugePages_Free' /proc/meminfo 2>/dev/null | awk '{print $2}' || echo 0)
+
+    local req=$(( (ring_size / 1024 + 1) * queues ))
+
+    # Emit the status line first (via _record), then print the advisory table
+    if [[ $free -ge $req ]]; then
+        pass "M7" "ring_size_advisor" \
+            "ring=${ring_size}, queues=${queues}, 需求=${req} hugepages, Free=${free}, 富余=$(( free - req ))"
+    else
+        fail "M7" "ring_size_advisor" \
+            "ring=${ring_size}, queues=${queues}, 需求=${req} hugepages, Free=${free} (不足)" \
+            "echo $(( req + 10 )) > /proc/sys/vm/nr_hugepages"
+        if [[ $OPT_APPLY -eq 1 || $OPT_DRY_RUN -eq 1 ]]; then
+            run_fix "echo $(( req + 10 )) > /proc/sys/vm/nr_hugepages"
+        fi
+    fi
+
+    # Print the reference table in human-readable mode
+    if [[ $OPT_JSON -eq 0 ]]; then
+        printf "  %b%-12s %-8s %s%b\n" "$C_BOLD" "ring_size" "queues" "需求 hugepages" "$C_RESET"
+        printf "  %-12s %-8s %s\n" "---------" "------" "--------------"
+        for rs in 512 1024 2048 4096 6144; do
+            for q in 1 2 4; do
+                local row_req=$(( (rs / 1024 + 1) * q ))
+                local marker=""
+                if [[ $rs -eq $ring_size && $q -eq $queues ]]; then
+                    marker=" ${C_INFO}<-- 当前配置${C_RESET}"
+                fi
+                printf "  %-12s %-8s %s%b\n" "$rs" "$q" "$row_req" "$marker"
+            done
+        done
+    fi
+}
+
+# ─── Summary output ───────────────────────────────────────────────────────────
+print_summary() {
+    if [[ $OPT_JSON -eq 0 ]]; then
+        printf "\n%s\n" "$(printf '═%.0s' {1..55})"
+        printf "${C_BOLD}汇总:${C_RESET} "
+        printf "${C_FAIL}%d FAIL${C_RESET}, " "$COUNT_FAIL"
+        printf "${C_WARN}%d WARN${C_RESET}, " "$COUNT_WARN"
+        printf "${C_PASS}%d PASS${C_RESET}\n" "$COUNT_PASS"
+        if [[ $COUNT_FAIL -gt 0 || $COUNT_WARN -gt 0 ]]; then
+            if [[ $CMD == "check" ]]; then
+                echo -e "运行 '${C_INFO}${SCRIPT_NAME} apply --iface ${OPT_IFACE} --app-cpus ${OPT_APP_CPUS}${C_RESET}' 自动修复 FAIL 和 WARN 项"
+            fi
+        fi
+    else
+        local ts
+        ts=$(date -Is 2>/dev/null || date '+%Y-%m-%dT%H:%M:%S%z')
+        printf '{\n'
+        printf '  "timestamp": "%s",\n' "$ts"
+        printf '  "tool": "%s",\n' "${SCRIPT_NAME} v${VERSION}"
+        printf '  "iface": "%s",\n' "$OPT_IFACE"
+        printf '  "app_cpus": "%s",\n' "$OPT_APP_CPUS"
+        printf '  "ring_size": %d,\n' "$OPT_RING_SIZE"
+        printf '  "queues": %d,\n' "$OPT_QUEUES"
+        printf '  "summary": { "pass": %d, "warn": %d, "fail": %d },\n' \
+            "$COUNT_PASS" "$COUNT_WARN" "$COUNT_FAIL"
+        printf '  "checks": [%s\n  ]\n' "$JSON_CHECKS"
+        printf '}\n'
+    fi
+}
+
+# ─── Header output ────────────────────────────────────────────────────────────
+print_header() {
+    if [[ $OPT_JSON -eq 0 ]]; then
+        printf "%s\n" "$(printf '═%.0s' {1..55})"
+        printf "${C_BOLD}${SCRIPT_NAME} v${VERSION}${C_RESET}  |  接口: ${C_INFO}${OPT_IFACE}${C_RESET}  |  应用核: ${C_INFO}${OPT_APP_CPUS}${C_RESET}\n"
+        printf "%s\n" "$(printf '═%.0s' {1..55})"
+    fi
+}
+
+# ─── report subcommand ────────────────────────────────────────────────────────
+run_report() {
+    [[ -f "$OPT_BEFORE_FILE" ]] || die "before 文件不存在: $OPT_BEFORE_FILE"
+    [[ -f "$OPT_AFTER_FILE"  ]] || die "after 文件不存在: $OPT_AFTER_FILE"
+
+    if ! command -v python3 &>/dev/null; then
+        die "report 模式需要 python3"
+    fi
+
+    python3 - "$OPT_BEFORE_FILE" "$OPT_AFTER_FILE" <<'PYEOF'
+import json, sys
+
+def load(path):
+    with open(path) as f:
+        return json.load(f)
+
+before = load(sys.argv[1])
+after  = load(sys.argv[2])
+
+print("=" * 65)
+print(f"  X3522-TUNE 对比报告")
+print(f"  Before : {sys.argv[1]}  ({before.get('timestamp','?')})")
+print(f"  After  : {sys.argv[2]}  ({after.get('timestamp','?')})")
+print("=" * 65)
+
+STATUS_RANK = {"pass": 0, "warn": 1, "fail": 2}
+ICONS = {"pass": "✅ PASS", "warn": "⚠️  WARN", "fail": "❌ FAIL"}
+
+before_map = {c["id"]: c for c in before.get("checks", [])}
+after_map  = {c["id"]: c for c in after.get("checks",  [])}
+
+all_ids = sorted(set(list(before_map.keys()) + list(after_map.keys())))
+
+improved = 0
+regressed = 0
+
+for cid in all_ids:
+    bc = before_map.get(cid)
+    ac = after_map.get(cid)
+    if bc is None or ac is None:
+        continue
+    bs = bc["status"]
+    as_ = ac["status"]
+    arrow = "  →  "
+    if STATUS_RANK[as_] < STATUS_RANK[bs]:
+        arrow = " ✨→ "
+        improved += 1
+    elif STATUS_RANK[as_] > STATUS_RANK[bs]:
+        arrow = " ⚡→ "
+        regressed += 1
+    print(f"  [{cid}] {bc['name']:<25}  {ICONS[bs]}{arrow}{ICONS[as_]}")
+    if bc["detail"] != ac["detail"]:
+        print(f"       Before: {bc['detail']}")
+        print(f"       After : {ac['detail']}")
+
+print("=" * 65)
+bs = before["summary"]
+as_ = after["summary"]
+print(f"  Before 汇总: {bs['fail']} FAIL, {bs['warn']} WARN, {bs['pass']} PASS")
+print(f"  After  汇总: {as_['fail']} FAIL, {as_['warn']} WARN, {as_['pass']} PASS")
+print(f"  改善项: {improved}  退步项: {regressed}")
+print("=" * 65)
+PYEOF
+}
+
+# ─── Argument parsing ─────────────────────────────────────────────────────────
+parse_args() {
+    [[ $# -eq 0 ]] && { usage; exit 0; }
+
+    CMD="$1"; shift
+
+    case "$CMD" in
+        check|apply) ;;
+        report)
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    --before) OPT_BEFORE_FILE="$2"; shift 2 ;;
+                    --after)  OPT_AFTER_FILE="$2";  shift 2 ;;
+                    -h|--help) usage; exit 0 ;;
+                    *) die "Unknown option: $1" ;;
+                esac
+            done
+            [[ -n "$OPT_BEFORE_FILE" && -n "$OPT_AFTER_FILE" ]] || \
+                die "report 需要 --before 和 --after"
+            return
+            ;;
+        -h|--help) usage; exit 0 ;;
+        *) die "Unknown command: $CMD  (use check | apply | report)" ;;
+    esac
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --iface)      OPT_IFACE="$2";     shift 2 ;;
+            --app-cpus)   OPT_APP_CPUS="$2";  shift 2 ;;
+            --ring-size)  OPT_RING_SIZE="$2"; shift 2 ;;
+            --queues)     OPT_QUEUES="$2";    shift 2 ;;
+            --rx-usecs)   OPT_RX_USECS="$2";  shift 2 ;;
+            --json)       OPT_JSON=1;          shift   ;;
+            --apply)      OPT_APPLY=1;         shift   ;;
+            --dry-run)    OPT_DRY_RUN=1;       shift   ;;
+            -h|--help)    usage; exit 0 ;;
+            *) die "Unknown option: $1" ;;
+        esac
+    done
+
+    [[ -n "$OPT_IFACE"    ]] || die "--iface is required"
+    [[ -n "$OPT_APP_CPUS" ]] || die "--app-cpus is required"
+
+    if [[ $CMD == "apply" ]]; then
+        OPT_APPLY=1
+    fi
+
+    if [[ $OPT_APPLY -eq 1 && $OPT_DRY_RUN -eq 0 ]]; then
+        require_root
+    fi
+}
+
+# ─── Main ─────────────────────────────────────────────────────────────────────
+main() {
+    parse_args "$@"
+
+    if [[ "$CMD" == "report" ]]; then
+        run_report
+        exit 0
+    fi
+
+    print_header
+    check_hugepages
+    check_irqbalance
+    check_irq_affinity
+    check_interrupt_moderation
+    check_numa_topology
+    check_cpu_governor
+    check_ring_size_advisor
+    print_summary
+
+    # Exit with non-zero if there are failures (useful for CI)
+    [[ $COUNT_FAIL -eq 0 ]]
+}
+
+main "$@"
